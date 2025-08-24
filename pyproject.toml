@@ -1,0 +1,16 @@
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+exclude = ["results", "build", "dist", ".venv", "venv", "__pycache__"]
+
+[tool.ruff.lint]
+# E,F: pycodestyle/pyflakes; I: import sorting; UP: pyupgrade; B: bugbear
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E203"]  # keeps Black compatibility on slices
+
+[tool.ruff.lint.isort]
+combine-as-imports = true

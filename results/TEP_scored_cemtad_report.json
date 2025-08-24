@@ -1,0 +1,15 @@
+{
+  "n_rows": 26400,
+  "n_features": 52,
+  "normal_rows": 7200,
+  "calibration": {
+    "median": 0.2578472937009962,
+    "mad": 0.10627143820309834,
+    "alpha": 0.10126920064585049
+  },
+  "model_used": "cemtad+",
+  "window": 60,
+  "epochs": 30,
+  "corr_window": 120,
+  "patch": 6
+}
