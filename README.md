@@ -1,109 +1,155 @@
-CEM-TAD+ — Comprehensive Ensemble for Multivariate Time-Series Anomaly Detection
-CEM-TAD+ is a GPU-ready and explainable anomaly detection system designed for multivariate time-series data. It processes your data and outputs a scored CSV file enriched with an Abnormality_score (ranging from 0 to 100) and the top contributing features (top_feature_1 through top_feature_7) for each timestamp.
+# CEM-TAD+ — Comprehensive Ensemble for Multivariate Time-Series Anomaly Detection
 
-An interactive Streamlit dashboard is also included to explore either the raw input data or the final scored results.
+**Live demo:** https://cem-tad-comprehensive-ensemble-for-multivariate-time-series-an.streamlit.app/  
+**Tech:** Python • scikit-learn • (optional) PyTorch • Plotly • Streamlit
 
-✨ Features
-Five-Expert Ensemble: The core of the system is an ensemble model combining a Patch-Transformer forecaster, PCA reconstruction, Robust Mahalanobis distance (with Ledoit–Wolf covariance), an Isolation Forest, and a Correlation-Shift graph.
+CEM-TAD+ is an explainable ensemble for **multivariate** time-series anomaly detection.  
+It outputs a single **0–100 Abnormality_score** per row **and** the **Top-7 contributing features** (`top_feature_1..7`) so operators can see *what* triggered an alert.
 
-Robust Scoring: Anomaly scores are generated using a rank-average of the experts' outputs, calibrated to a 0–100 scale based on a training window, and smoothed with an Exponentially Weighted Moving Average (EWMA).
+---
 
-Built-in Explainability: The model identifies per-feature contributions to the anomaly score, listing the top 7 features that contribute more than 1% to the score.
+## Key features
 
-Interactive Dashboard: The Streamlit app provides powerful visualizations, including a suggested anomaly threshold, event segmentation with KPIs, a feature-contribution frequency plot, time-of-day/weekday heatmaps, a correlation-change heatmap, and raw signal overlays.
+- **Five complementary experts** catch different failure modes:  
+  1) **Temporal forecaster (Patch-Transformer style)** → per-feature residuals `|ŷ−y|`  
+  2) **PCA reconstruction** → low-rank manifold deviation  
+  3) **Robust Mahalanobis (Ledoit–Wolf)** → multivariate distance, per-feature z² contributions  
+  4) **Isolation Forest** → partition-based outlier score (LOFO-style per-feature proxy)  
+  5) **Correlation-shift graph** → rolling correlation vs training; L1 matrix Δ; per-feature = row-sum
 
-📂 Project Layout
-The project is organized as follows:
+- **Ensemble & scoring:** rank-average expert scores → **robust calibration** (median/MAD + percentile anchor) → **0–100** → **EWMA** smoothing  
+- **Explainability:** `top_feature_1..7` per row (>\~1% rule; blanks allowed if fewer than 7)  
+- **Two modes:**  
+  - **Raw CSV** → run full pipeline and produce scored CSV  
+  - **Scored CSV** → load and analyze instantly in the UI  
+- **Operator-friendly dashboard:** threshold suggestions (Youden-J / train-FPR / legacy), event segmentation, contributors frequency, train-vs-rest histogram, time-of-day heatmap, correlation-Δ heatmap, raw overlays  
+- **GPU-first forecaster** (A100-ready), other experts are lightweight on CPU
 
-project/
-├─ cemtad/
-│  └─ streamlit_app.py
-├─ scripts/
-│  ├─ run_cemtad.py          # Main scoring pipeline
-│  └─ eval_baselines.py      # (Optional) AUROC/AP vs baselines
-├─ results/
-├─ .streamlit/config.toml
-├─ requirements.txt
-└─ README.md
-🚀 Quickstart
-Follow these steps to get up and running.
+---
 
-1. Environment Setup
-First, create and activate a virtual environment.
+## Try it now (Streamlit)
 
-Bash
+**Live app:** https://cem-tad-comprehensive-ensemble-for-multivariate-time-series-an.streamlit.app/
 
-# Create and activate the environment
-python -m venv .venv && source .venv/bin/activate
-# For Windows PowerShell: .\.venv\Scripts\Activate.ps1
+- Use **“Scored file”** mode for an instant tour, or **“Raw file”** to run the full pipeline in-app (CPU-friendly defaults).  
+- Upload a CSV with a timestamp column (e.g., `Time`) and numeric features.
 
-# Install base requirements
+---
+
+## 📦 Installation (local)
+
+```bash
+# create & activate a venv
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+
+# install deps
 pip install -r requirements.txt
-For GPU acceleration with the forecaster model, install the appropriate PyTorch version.
+# Optional (GPU forecaster): install PyTorch per your CUDA setup at [https://pytorch.org/get-started/locally/](https://pytorch.org/get-started/locally/)
+```
 
-Bash
+## Usage
+1) Run the pipeline (CLI)
+From the project root:
 
-# Example for CUDA 12.1
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-
-# For CPU-only execution
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-2. Score a Dataset
-Run the main pipeline script to process your time-series data. The output CSV will contain the original columns plus the Abnormality_score and top_feature_1..7.
-
-Bash
-
-PYTHONPATH=. python scripts/run_cemtad.py \
+```bash
+export PYTHONPATH=.
+python scripts/run_cemtad.py \
   --input TEP_Train_Test.csv \
   --output results/TEP_scored_cemtad.csv \
   --timestamp_col Time \
-  --normal_start "2004-01-01 00:00" --normal_end "2004-01-05 23:59" \
-  --window 60 --epochs 30 --corr_window 120 --patch 6 \
-  --make_plots --plots_dir results/figs
-3. Explore in the Dashboard
-Launch the Streamlit application to visualize your raw or scored dataset.
-
-Bash
-
-streamlit run cemtad/streamlit_app.py
-📊 (Optional) Evaluate Baselines
-You can evaluate the ensemble's performance (AUROC/AP) against individual expert models using the eval_baselines.py script.
-
-Bash
-
-PYTHONPATH=. python scripts/eval_baselines.py \
-  --input results/TEP_scored_cemtad.csv \
-  --timestamp_col Time \
   --normal_start "2004-01-01 00:00" \
-  --normal_end "2004-01-05 23:59"
-🛡️ Edge-Case & Data-Quality Handling
-The pipeline includes several checks to ensure robustness:
+  --normal_end   "2004-01-05 23:59" \
+  --window 60 --epochs 30 --corr_window 120 --patch 6 \
+  --smoothing_alpha 0.15 \
+  --make_plots --plots_dir results/figs
+```
+# Outputs
+results/TEP_scored_cemtad.csv → original columns + Abnormality_score + top_feature_1..7
 
-Missing Values: Handled using forward-fill (ffill) followed by linear interpolation.
+results/figs/ → scores_over_time.png, score_hist_train_vs_rest.png, top_features_at_<idx>.png
 
-Constant Features: A guard is in place to manage features that do not vary.
+results/TEP_scored_cemtad_report.json → rows, features, calibration params
 
-Training Window: The system warns if the training window is shorter than 72 hours or if high anomaly scores are detected within it.
 
-Explainability: If fewer than 7 features contribute significantly to an anomaly, the remaining top_feature columns are left blank.
+## Project Layout
 
-Numerical Stability: An optional tiny epsilon can be added to residuals to avoid issues with exact zeros.
+repo/
+├─ cemtad/
+│  ├─ init.py
+│  ├─ data.py           # load/validate/resample/scale + normal mask
+│  ├─ experts.py        # 5 experts (temporal, PCA, Mahalanobis, IF, corr-shift)
+│  ├─ ensemble.py       # rank-average fuse
+│  ├─ scoring.py        # robust calibration → 0–100 + EWMA
+│  ├─ attribution.py    # Top-7 contributors
+│  ├─ visualize.py      # timeline, hist, top-features bar
+│  └─ streamlit_app.py  # dashboard (raw/scored modes)
+├─ scripts/
+│  └─ run_cemtad.py     # CLI entry (run_pipeline)
+├─ results/             # sample outputs & figures
+├─ requirements.txt
+├─ README.md
+└─ .streamlit/config.toml
 
-⚙️ For Developers
-To maintain code quality, we use black for formatting and ruff for linting.
 
-Bash
+## Results
+Results
+(attained on TEP slice; proxy labels = train vs rest)
 
-# Install development tools
-pip install black ruff
+Method	          AUROC	 AP
+CEM-TAD+ (0–100)	0.934	0.976
+Mahalanobis (LW)	0.848	0.947
 
-# Format and lint the codebase
-black . -l 100
-ruff check . --fix
-🚢 Deployment
-Local Deployment
-Run the Streamlit app directly for local use.
+Export to Sheets
+Training window KPIs: mean 3.87, max 19.35, p99 15.88 (target: mean <10, max <25)
 
-Bash
+Suggested threshold: ≈ 60 (Youden-J / train-FPR 0.5% / legacy)
 
-streamlit run cemtad/streamlit_app.py
+Plots: see results/figs/ — timeline with training band, train-vs-rest histogram, Top-7 at peak.
+
+
+## How It Works
+
+flowchart LR
+    A[Raw CSV] --> B[Preprocess\nparse → 1-min → impute → scale]
+    B --> E1[Forecaster residuals]
+    B --> E2[PCA recon error]
+    B --> E3[Mahalanobis (LW)]
+    B --> E4[Isolation Forest]
+    B --> E5[Correlation shift]
+    E1 --> F[Rank-average]
+    E2 --> F
+    E3 --> F
+    E4 --> F
+    E5 --> F
+    F --> C[Calibrate median/MAD + q99 → 0–100]
+    C --> S[EWMA smoothing]
+    S --> T{Threshold suggest}
+    T --> G[Event segmentation]
+    S --> O1[Scored CSV (+Top-7)]
+    C --> O2[Report JSON]
+    S --> O3[Plots]
+
+
+##  Data Assumptions
+
+Timestamp column (e.g., Time) parseable by pandas.to_datetime.
+
+Minute-level alignment (the pipeline resamples to 1-min using "min").
+
+Missing values handled via ffill/bfill + time-interpolation.
+
+A normal training window must be provided for robust calibration (e.g., 2004-01-01 00:00 → 2004-01-05 23:59).
+
+
+## References
+
+Nie, Y. et al. PatchTST: A Time Series is Worth 1D Patches (ICLR 2023)
+
+Liu, F. T. et al. Isolation Forest (ICDM 2008)
+
+Ledoit, O. & Wolf, M. A Well-Conditioned Estimator for Large-Dimensional Covariance Matrices (J Multivar Anal, 2004)
+
+scikit-learn, PyTorch, Plotly, Streamlit documentation
+
+Downs & Vogel. Tennessee Eastman Process (Computers & Chemical Engineering, 1993)
